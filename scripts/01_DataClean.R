@@ -5,11 +5,13 @@
 
 stars_GWA_raw <- read_csv("data/raw/KATMKEFJPWS_2006-2021_Sea_Star_Count.csv")
 
+stars_GWA_b_raw <- read_csv("data/raw/KBAY2012-2023_Sea_Star_Anemone_Count.csv")
+
 stars_MARINe_raw <- read_csv("data/raw/seastarkat_size_count_zeroes_totals.csv")
 
 percent_cover_GWA_raw <- read_csv("data/raw/KATMKEFJPWS_2006-2021_Rocky_Intertidal_PercentCover.csv")
 
-percent_cover_MARINe_raw <- read_csv("data/raw/photoplot_and_transects_summary.csv")
+percent_cover_MARINe_raw <- read_csv("data/raw/MARINe_photoplots/photoplot_and_transects_summary.csv")
 
 
 
@@ -30,24 +32,25 @@ GWA_site_georegion_key <- data.frame(
   rep("AK Katmai",5)))
 
 
-#Clean GWA sea star dataset
+#Clean GWA sea star dataset A (Katmai NP, Kenai Fjords NP, and Western Prince William Sound)
 stars_GWA_a <- stars_GWA_raw %>% 
   clean_names() %>% 
+  #remove sites that were only surveyes a few times (non-primary GWA sites)
+  filter(site_name %in% GWA_site_names) %>% 
+  #remove surveys that were conducted across 100m of shoreline, since stretches of intertidal zone are not equivalent in terms of their habitat for sea stars
+  filter(transect_length_m == 50) %>% 
   #select and rename important variables 
-  select(site_code, 
-         site = site_name, 
+  select(site = site_name, 
          year = sample_year,
          species = species_name, 
-         density = density_individuals_per_200_square_m) %>% 
-  #remove sites that were only surveyes a few times (non-primary GWA sites)
-  filter(site %in% GWA_site_names) %>% 
+         total = density_individuals_per_200_square_m) %>% 
   #Append georegion to dataframe
   left_join(., GWA_site_georegion_key, by = "site") %>% 
   #Append season to dataframe
   mutate(season = "Summer",
          num_plots_sampled = 1) %>% 
   #Pivot wider to have one row for each survey
-  pivot_wider(names_from = species, values_from = density) %>% 
+  pivot_wider(names_from = species, values_from = total) %>% 
   #Rename columns with sea star 6-letter codes
   rename("DERIMB" = "Dermasterias imbricata",
          "EVATRO" = "Evasterias troschelii",
@@ -58,13 +61,63 @@ stars_GWA_a <- stars_GWA_raw %>%
          "PYCHEL" = "Pycnopodia helianthoides",
          "SOLSPP" = "Solaster stimpsoni")
 
+#Clean GWA sea star dataset A (Kachemak Bay)
+stars_GWA_b <- stars_GWA_b_raw %>% 
+  clean_names() %>% 
+  #Remove non-echinoderms
+  filter(phylum == "Echinodermata") %>% 
+  #Select relevant columns
+  select(site, year, stratum, species,
+         count = abundance_number_ind_100_m2) %>% 
+  #Add totals of all transects together
+  group_by(site, year, species) %>% 
+  summarise(count = sum(count), .groups = "drop") %>% 
+  #Add variables for clean data merge
+  mutate(season = "Summer",
+         num_plots_sampled = 4,
+         georegion = "AK Kachemak Bay") %>% 
+  #Pivot wider to have one row for each survey
+  pivot_wider(names_from = species, 
+              values_from = count,
+              values_fill = 0) %>% 
+  #Rename columns with sea star 6-letter codes
+  rename("DERIMB" = "Dermasterias imbricata",
+         "EVATRO" = "Evasterias troschelii",
+         "HENSPP" = "Henricia leviuscula",
+         "ORTKOE" = "Orthasterias koehleri",
+         "PISOCH" = "Pisaster ochraceus",
+         "PYCHEL" = "Pycnopodia helianthoides",
+         "SOLSPP" = "Solaster spp.",
+         "SOLSTI" = "Solaster stimpsoni",
+         "LETNAN" = "Lethasterias nanimensis",
+         "ASTSPP" = "Asterias sp.") %>% 
+  #Combine all Solaster species into one variable
+  mutate(SOLSPP = SOLSPP+SOLSTI) %>% 
+  select(-SOLSTI)
+
+#To account for surveys in which no stars were detected, we will filter for all survey site/year combos in the raw data and then merge the datasets
+temp <- stars_GWA_b_raw %>% 
+  clean_names() %>% 
+  select(site, year) %>% 
+  unique() %>% 
+  mutate(georegion = "AK Kachemak Bay",
+         season = "Summer",
+         num_plots_sampled = 4,
+         DERIMB = 0,EVATRO = 0, HENSPP = 0, ORTKOE = 0, 
+         PISOCH = 0,PYCHEL = 0, SOLSPP = 0, LETNAN = 0,
+         ASTSPP = 0)
+
+#NOTE THIS STILL NEEDS TO BE FIXED!!!!!
+stars_GWA_b_temp <- bind_rows(stars_GWA_b, temp) %>% 
+
+
+
 #Part 2B: MARINe sea star dataset ----------------------------------------------
 
 stars_MARINe <- stars_MARINe_raw %>% 
   clean_names() %>% unique() %>% 
   #select and rename key columns
-  select(site_code = site_code,
-         georegion,
+  select(georegion,
          site = marine_site_name, 
          year = marine_common_year,
          season = season_name,
@@ -72,17 +125,11 @@ stars_MARINe <- stars_MARINe_raw %>%
          species = species_code, 
          size_bin, total) %>% 
   #group by survey metadata and calculate the total number of stars per survey (remove size class bins)
-  group_by(site_code, georegion, site, year, season, num_plots_sampled, species) %>% 
+  group_by(georegion, site, year, season, num_plots_sampled, species) %>% 
   summarise(total = sum(total), .groups = "drop") %>% 
-  #divide total number of stars counted by number of plots surveyed
-  mutate(density_per_plot = total/num_plots_sampled) %>% 
-  #remove unnecessary columns
-  select(-total,
-         #-num_plots_sampled #Keeping due to data error! 
-         ) %>% 
   #pivot wider to determine have one row per survey, fill blanks with 0s
   pivot_wider(names_from = species, 
-              values_from = density_per_plot, 
+              values_from = total, 
               values_fill = 0) %>% 
   #Remove katharina (not an echinoderm) and leptasterias (cryptic and not surveyed by other programs)
   select(-KATTUN, -LEPTAS)
@@ -91,9 +138,12 @@ stars_MARINe <- stars_MARINe_raw %>%
 # Combine sea star datasets together -------------------------------------------
 
 #Create new "stars" dataframe by combining all sea star datasets
-stars <- bind_rows(stars_GWA, stars_MARINe) %>% 
+stars <- bind_rows(stars_GWA_a, stars_GWA_b, stars_MARINe) %>% 
   #replace NA values from non-shared columns with zeros.
-  replace_na(list(MEDAEQ = 0, SOLSPP = 0, PISGIG = 0, PATMIN = 0, PISBRE = 0))
+  replace_na(list(MEDAEQ = 0, SOLSPP = 0, 
+                  PISGIG = 0, PATMIN = 0, 
+                  PISBRE = 0, ASTSPP = 0, 
+                  LETNAN = 0))
 
 
 
@@ -124,3 +174,4 @@ percent_cover_GWA <- percent_cover_GWA_raw %>%
 
 percent_cover_MARINe <- percent_cover_MARINe_raw %>% 
   clean_names()
+
