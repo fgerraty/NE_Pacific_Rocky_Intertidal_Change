@@ -164,9 +164,8 @@ stars_MARINe <- stars_MARINe_raw %>%
   #Filter out surveys in which not all the plots were surveyed
   group_by(site) %>% 
   filter(num_plots_sampled == max(num_plots_sampled)) %>% 
-  ungroup() %>% 
-  #remove irrelevant column
-  select(-num_plots_sampled)
+  ungroup()
+
   
 
 
@@ -178,7 +177,9 @@ stars <- bind_rows(stars_GWA_a, stars_GWA_b, stars_MARINe) %>%
   replace_na(list(MEDAEQ = 0, SOLSPP = 0, 
                   PISGIG = 0, PATMIN = 0, 
                   PISBRE = 0, ASTSPP = 0, 
-                  LETNAN = 0))
+                  LETNAN = 0)) %>% 
+  #remove irrelevant column
+  select(-num_plots_sampled)
 
 # Export combined sea star dataset in "clean" data folder
 write_csv(stars, "data/clean/stars.csv")
