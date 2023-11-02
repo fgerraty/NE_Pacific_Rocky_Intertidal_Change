@@ -61,8 +61,10 @@ stars_GWA_a <- stars_GWA_raw %>%
          "PYCHEL" = "Pycnopodia helianthoides",
          "SOLSPP" = "Solaster stimpsoni")
 
-#Clean GWA sea star dataset A (Kachemak Bay)
-stars_GWA_b <- stars_GWA_b_raw %>% 
+#Clean GWA sea star dataset A (Kachemak Bay) #######
+
+#Clean stars
+stars_GWA_b_temp <- stars_GWA_b_raw %>% 
   clean_names() %>% 
   #Remove non-echinoderms
   filter(phylum == "Echinodermata") %>% 
@@ -95,20 +97,36 @@ stars_GWA_b <- stars_GWA_b_raw %>%
   mutate(SOLSPP = SOLSPP+SOLSTI) %>% 
   select(-SOLSTI)
 
+
+#First, we have to make blank survey rows for the surveys without any stars detected
+
 #To account for surveys in which no stars were detected, we will filter for all survey site/year combos in the raw data and then merge the datasets
-temp <- stars_GWA_b_raw %>% 
+all_KBAY_surveys <- stars_GWA_b_raw %>% 
   clean_names() %>% 
   select(site, year) %>% 
   unique() %>% 
-  mutate(georegion = "AK Kachemak Bay",
+  mutate(site_year = paste0(site, "_", year),
+         georegion = "AK Kachemak Bay",
          season = "Summer",
          num_plots_sampled = 4,
          DERIMB = 0,EVATRO = 0, HENSPP = 0, ORTKOE = 0, 
          PISOCH = 0,PYCHEL = 0, SOLSPP = 0, LETNAN = 0,
          ASTSPP = 0)
 
-#NOTE THIS STILL NEEDS TO BE FIXED!!!!!
-stars_GWA_b_temp <- bind_rows(stars_GWA_b, temp) %>% 
+#Select all the site/year combos for surveys with stars detected
+KBAY_surveys_with_stars <- stars_GWA_b_temp %>% 
+  select(site, year) %>% 
+  unique() %>% 
+  mutate(site_year = paste0(site, "_", year))
+
+#Create dataframe with surveys that no stars were detected
+KBAY_empty_surveys <- subset(all_KBAY_surveys, 
+                             !(site_year %in% KBAY_surveys_with_stars$site_year)) %>% 
+  select(-site_year)
+
+
+#Finally, bind the blank and non-blank survey rows together for KBAY surveys
+stars_GWA_b <- bind_rows(stars_GWA_b_temp, KBAY_empty_surveys)
 
 
 
@@ -144,10 +162,6 @@ stars <- bind_rows(stars_GWA_a, stars_GWA_b, stars_MARINe) %>%
                   PISGIG = 0, PATMIN = 0, 
                   PISBRE = 0, ASTSPP = 0, 
                   LETNAN = 0))
-
-
-
-
 
 # Export combined sea star dataset in "clean" data folder
 write_csv(stars, "data/clean/stars.csv")
