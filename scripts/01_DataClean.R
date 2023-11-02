@@ -1,3 +1,9 @@
+##########################################################################
+# Northeast Pacific Rocky Intertidal Change Project ######################
+# Author: Frankie Gerraty (frankiegerraty@gmail.com; fgerraty@ucsc.edu) ##
+##########################################################################
+# Script 01: Clean Data ##################################################
+#-------------------------------------------------------------------------
 
 ##########################################
 # Part 1: Import Raw Datasets ############
@@ -134,6 +140,8 @@ stars_GWA_b <- bind_rows(stars_GWA_b_temp, KBAY_empty_surveys)
 
 stars_MARINe <- stars_MARINe_raw %>% 
   clean_names() %>% unique() %>% 
+  #remove katharina tunicata (not a star)
+  filter(species_code != "KATTUN") %>% 
   #select and rename key columns
   select(georegion,
          site = marine_site_name, 
@@ -149,8 +157,17 @@ stars_MARINe <- stars_MARINe_raw %>%
   pivot_wider(names_from = species, 
               values_from = total, 
               values_fill = 0) %>% 
-  #Remove katharina (not an echinoderm) and leptasterias (cryptic and not surveyed by other programs)
-  select(-KATTUN, -LEPTAS)
+  #Remove leptasterias (cryptic and not surveyed by other programs)
+  select(-LEPTAS) %>% 
+  #Filter out 5-plot surveys at mussel shoals (2019-2021)
+  filter(!(site == "Mussel Shoals" & num_plots_sampled == 5)) %>% 
+  #Filter out surveys in which not all the plots were surveyed
+  group_by(site) %>% 
+  filter(num_plots_sampled == max(num_plots_sampled)) %>% 
+  ungroup() %>% 
+  #remove irrelevant column
+  select(-num_plots_sampled)
+  
 
 
 # Combine sea star datasets together -------------------------------------------
